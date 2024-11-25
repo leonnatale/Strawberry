@@ -35,6 +35,7 @@ pub enum TokenKind {
     BracketScope(Vec<Token>),
     Identifier(String),
     Let(Box<Token>, Option<Box<Token>>),
+    Number(f64),
     Attribution,
     Unknown
 }
@@ -70,7 +71,7 @@ impl <'a> StrawberryLexer <'a> {
             current_character: Some(char::default()),
             index: -1,
             tokens: Vec::new(),
-            operators: &[ '=' ]
+            operators: &[ '=', '-' ]
         }
     }
 
@@ -200,17 +201,8 @@ impl <'a> StrawberryLexer <'a> {
             self.next_character();
         }
 
-        let end = self.index as usize;
-        let span = TokenSpan {
-            start,
-            end,
-            text: self.source[start..end].to_string()
-        };
 
-        let mut token = Token {
-            kind: TokenKind::Identifier(symbol_name.clone()),
-            span
-        };
+        let mut token_kind = TokenKind::Identifier(symbol_name.clone());
 
         if symbol_name == "let" {
             let mut variable_value = None;
@@ -229,11 +221,23 @@ impl <'a> StrawberryLexer <'a> {
                 }
             }
 
-            token.kind = TokenKind::Let(
+            token_kind = TokenKind::Let(
                 Box::new(variable_name.unwrap()),
                 variable_value
             );
         }
+
+        let end = self.index as usize;
+            let span = TokenSpan {
+                start,
+                end,
+                text: self.source[start..end].to_string()
+            };
+
+        let token = Token {
+            kind: token_kind,
+            span
+        };
 
         Ok(token)
     }
@@ -274,6 +278,45 @@ impl <'a> StrawberryLexer <'a> {
         Ok(token)
     }
 
+    fn parse_number(&mut self) -> Result<Token, StrawberryError> {
+        let start = self.index as usize;
+        let mut number_str = String::new();
+        let mut is_float = false;
+    
+        while let Some(current_character) = self.current_character {
+            if current_character.is_digit(10) {
+                number_str.push(current_character);
+            } else if current_character == '.' {
+                if is_float {
+                    break;
+                }
+                is_float = true;
+                number_str.push(current_character);
+            } else {
+                break;
+            }
+            self.next_character();
+        }
+
+        let number: f64 = number_str.parse().map_err(|_| {
+            StrawberryError::syntax_error(&format!("\"{}\" is not a valid number", number_str))
+        })?;
+
+        let end = self.index as usize;
+        let span = TokenSpan {
+            start,
+            end,
+            text: self.source[start..end].to_string(),
+        };
+        let token = Token {
+            kind: TokenKind::Number(number),
+            span,
+        };
+    
+        Ok(token)
+    }
+    
+
     fn next_token(&mut self) -> Result<Token, StrawberryError> {
         if let Some(current_character) = self.current_character {
             if current_character == '\'' {
@@ -296,9 +339,13 @@ impl <'a> StrawberryLexer <'a> {
                 return Ok(self.parse_operator()?);
             }
 
+            if current_character.is_digit(10) {
+                return Ok(self.parse_number()?);
+            }
+
             return Err(StrawberryError::syntax_error(&format!("Unexpected character: \"{}\"", current_character)));
         } else {
-            return Err(StrawberryError::syntax_error(&format!("Unexpected EOF.")));
+            return Err(StrawberryError::syntax_error("Unexpected EOF."));
         }
     }
 
