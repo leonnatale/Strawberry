@@ -1,24 +1,21 @@
 mod error;
 mod lexer;
+mod parser;
 
 use error::StrawberryErrorKind;
 use lexer::StrawberryLexer;
+use parser::StrawberryParser;
 
 fn main() {
     let mut lex = StrawberryLexer::from_string(r#"
-    let hello = 'Hello'
-    let world = 'world'
-    let number = 1
-    let float = 1.5
-    let empty
+    a1(abc, abcd)
     "#);
     let result = lex.run_stream();
 
     match result {
         Ok(tokens) => {
-            for token in tokens {
-                println!("Span: {:?}\nToken: {:?}\n", token.span.text, token.kind);
-            }
+            let mut parser = StrawberryParser::new(tokens);
+            parser.run_token_stream();
         },
         Err(err) => {
             match err.kind {

@@ -35,6 +35,7 @@ pub enum TokenKind {
     BracketScope(Vec<Token>),
     Identifier(String),
     Let(Box<Token>, Option<Box<Token>>),
+    Call(String, Vec<Token>),
     Number(f64),
     Attribution,
     Unknown
@@ -55,22 +56,22 @@ pub struct Token {
 
 #[derive(Debug)]
 pub struct StrawberryLexer<'a> {
+    tokens: Vec<Token>,
     source: String,
     character_stream: Chars<'a>,
     current_character: Option<char>,
     index: isize,
-    tokens: Vec<Token>,
     operators: &'a [char]
 }
 
 impl <'a> StrawberryLexer <'a> {
     pub fn from_string(source: &'a str) -> Self {
         Self {
+            tokens: Vec::new(),
             source: source.to_string(),
             character_stream: source.chars(),
             current_character: Some(char::default()),
             index: -1,
-            tokens: Vec::new(),
             operators: &[ '=', '-' ]
         }
     }
@@ -79,6 +80,11 @@ impl <'a> StrawberryLexer <'a> {
         self.current_character = self.character_stream.next();
         self.index += 1;
     }
+
+    fn peek_character(&self) -> Option<char> {
+        self.source.chars().nth(self.index as usize)
+    }
+    
 
     fn parse_multiline_string(&mut self) -> Result<Token, StrawberryError> {
         let start = self.index as usize;
@@ -194,13 +200,12 @@ impl <'a> StrawberryLexer <'a> {
         let mut symbol_name = String::new();
 
         while let Some(current_character) = self.current_character {
-            if !current_character.is_alphanumeric() {
+            if !current_character.is_alphanumeric() && current_character != '_' {
                 break;
             }
             symbol_name.push(current_character);
             self.next_character();
         }
-
 
         let mut token_kind = TokenKind::Identifier(symbol_name.clone());
 
@@ -208,23 +213,64 @@ impl <'a> StrawberryLexer <'a> {
             let mut variable_value = None;
             high_skip_whitespace!(self);
             let variable_name = self.next_token();
-            treat_strawberry_error!(variable_name, syntax_error, "Set a variable name at the \"let\" statement"); 
-            high_skip_whitespace!(self);
-            let operator_token_binding = self.next_token();
+            treat_strawberry_error!(variable_name, syntax_error, "Set a variable name at the \"let\" statement");
+            let variable_name_binding = variable_name.unwrap();
+            if let TokenKind::Identifier(_) = variable_name_binding.kind {
+                high_skip_whitespace!(self);
+                let operator_token_binding = self.next_token();
+    
+                if let Ok(operator_token) = operator_token_binding {
+                    if operator_token.kind == TokenKind::Attribution {
+                        high_skip_whitespace!(self);
+                        let variable_value_binding = self.next_token();
+                        treat_strawberry_error!(variable_value_binding, syntax_error, "Set a variable value at the \"let\" statement"); 
+                        variable_value = Some(Box::new(variable_value_binding.unwrap()));
+                    }
+                }
+    
+                token_kind = TokenKind::Let(
+                    Box::new(variable_name_binding),
+                    variable_value
+                );
+            } else {
+                return Err(StrawberryError::syntax_error("Let statement was expecting an identifier."));
+            }
+        }
 
-            if let Ok(operator_token) = operator_token_binding {
-                if operator_token.kind == TokenKind::Attribution {
-                    high_skip_whitespace!(self);
-                    let variable_value_binding = self.next_token();
-                    treat_strawberry_error!(variable_value_binding, syntax_error, "Set a variable value at the \"let\" statement"); 
-                    variable_value = Some(Box::new(variable_value_binding.unwrap()));
+        if let TokenKind::Identifier(function_name) = token_kind.clone() {
+            let peek = self.peek_character();
+            if let Some(peeked) = peek {
+                if peeked == '(' {
+                    let mut arguments = Vec::new();
+                    self.next_character();
+                    while let Some(current_character) = self.current_character {
+                        if current_character == ')' {
+                            break;
+                        }
+
+                        if current_character == ',' || current_character.is_whitespace() {
+                            self.next_character();
+                            continue;
+                        }
+                        
+                        let next_token = self.next_token();
+
+                        if let Ok(next_token_binding) = next_token {
+                            arguments.push(next_token_binding);
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if self.current_character != Some(')') {
+                        return Err(StrawberryError::syntax_error("Function call was not closed"));
+                    }
+
+                    self.next_character();
+
+                    token_kind = TokenKind::Call(function_name, arguments);
                 }
             }
-
-            token_kind = TokenKind::Let(
-                Box::new(variable_name.unwrap()),
-                variable_value
-            );
         }
 
         let end = self.index as usize;
@@ -255,6 +301,27 @@ impl <'a> StrawberryLexer <'a> {
             self.next_character();
         }
 
+        let mut token_kind = TokenKind::Unknown;
+
+        if operator == "=" {
+            token_kind = TokenKind::Attribution;
+        }
+
+        if operator == "-" {
+            let unary_number = self.next_token();
+            treat_strawberry_error!(unary_number, syntax_error, "Could not use the unary operator.");
+            let unary_number_binding = unary_number.unwrap();
+            if let TokenKind::Number(number) = unary_number_binding.kind {
+                token_kind = TokenKind::Number(number * -1.0);
+            } else {
+                return Err(StrawberryError::syntax_error("The unary operator can be used only with numbers"));
+            }
+        }
+
+        if token_kind == TokenKind::Unknown {
+            return Err(StrawberryError::syntax_error(&format!("The operator \"{}\" does not exists.", operator)));
+        }
+
         let end = self.index as usize;
         let span = TokenSpan {
             start,
@@ -262,18 +329,10 @@ impl <'a> StrawberryLexer <'a> {
             text: self.source[start..end].to_string()
         };
 
-        let mut token = Token {
-            kind: TokenKind::Unknown,
+        let token = Token {
+            kind: token_kind,
             span
         };
-
-        if operator == "=" {
-            token.kind = TokenKind::Attribution;
-        }
-
-        if token.kind == TokenKind::Unknown {
-            return Err(StrawberryError::syntax_error(&format!("The operator \"{}\" does not exists.", operator)));
-        }
 
         Ok(token)
     }
