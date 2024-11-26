@@ -38,6 +38,10 @@ pub enum TokenKind {
     Call(String, Vec<Token>),
     Number(f64),
     Attribution,
+    Subtract(Box<Token>, Box<Token>),
+    Sum(Box<Token>, Box<Token>),
+    Multiply(Box<Token>, Box<Token>),
+    Divide(Box<Token>, Box<Token>),
     Unknown
 }
 
@@ -72,7 +76,7 @@ impl <'a> StrawberryLexer <'a> {
             character_stream: source.chars(),
             current_character: Some(char::default()),
             index: -1,
-            operators: &[ '=', '-' ]
+            operators: &[ '=', '+', '-' ]
         }
     }
 
@@ -289,7 +293,7 @@ impl <'a> StrawberryLexer <'a> {
     }
 
     fn parse_operator(&mut self) -> Result<Token, StrawberryError> {
-        let start = self.index as usize;
+        let mut start = self.index as usize;
         let mut operator = String::new();
 
         while let Some(current_character) = self.current_character {
@@ -305,6 +309,22 @@ impl <'a> StrawberryLexer <'a> {
 
         if operator == "=" {
             token_kind = TokenKind::Attribution;
+        }
+
+        if operator == "+" {
+            let last_token = self.tokens.pop();
+            high_skip_whitespace!(self);
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Sum(
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
         }
 
         if operator == "-" {
@@ -374,7 +394,6 @@ impl <'a> StrawberryLexer <'a> {
     
         Ok(token)
     }
-    
 
     fn next_token(&mut self) -> Result<Token, StrawberryError> {
         if let Some(current_character) = self.current_character {
@@ -384,10 +403,6 @@ impl <'a> StrawberryLexer <'a> {
     
             if current_character == '`' {
                 return Ok(self.parse_multiline_string()?);
-            }
-    
-            if current_character.is_alphabetic() {
-                return Ok(self.parse_symbol()?);
             }
     
             if current_character == '{' {
@@ -400,6 +415,10 @@ impl <'a> StrawberryLexer <'a> {
 
             if current_character.is_digit(10) {
                 return Ok(self.parse_number()?);
+            }
+
+            if current_character.is_alphabetic() {
+                return Ok(self.parse_symbol()?);
             }
 
             return Err(StrawberryError::syntax_error(&format!("Unexpected character: \"{}\"", current_character)));

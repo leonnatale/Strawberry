@@ -8,7 +8,7 @@ use parser::StrawberryParser;
 
 fn main() {
     let mut lex = StrawberryLexer::from_string(r#"
-    a1(abc, abcd)
+    let be = 1 + -1
     "#);
     let result = lex.run_stream();
 
