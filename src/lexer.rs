@@ -76,7 +76,7 @@ impl <'a> StrawberryLexer <'a> {
             character_stream: source.chars(),
             current_character: Some(char::default()),
             index: -1,
-            operators: &[ '=', '+', '-' ]
+            operators: &[ '=', '+', '-', '*', '/' ]
         }
     }
 
@@ -225,10 +225,25 @@ impl <'a> StrawberryLexer <'a> {
     
                 if let Ok(operator_token) = operator_token_binding {
                     if operator_token.kind == TokenKind::Attribution {
-                        high_skip_whitespace!(self);
-                        let variable_value_binding = self.next_token();
-                        treat_strawberry_error!(variable_value_binding, syntax_error, "Set a variable value at the \"let\" statement"); 
-                        variable_value = Some(Box::new(variable_value_binding.unwrap()));
+                        while let Some(current_char) = self.current_character {
+                            skip_whitespace!(current_char, self);
+                            if current_char == ';' {
+                                break;
+                            }
+                            let variable_value_binding = self.next_token()?;
+                            self.tokens.push(variable_value_binding);
+                        }
+                        if self.current_character != Some(';') {
+                            return Err(StrawberryError::syntax_error("Let statement was expecting a semicolon"));
+                        }
+                        self.next_character();
+                        let last_token_result = self.tokens.pop();
+
+                        if let Some(last_token) = last_token_result {
+                            variable_value = Some(Box::new(last_token));
+                        } else {
+                            return Err(StrawberryError::syntax_error("Let statement was expecting a value"));
+                        }
                     }
                 }
     
@@ -327,7 +342,58 @@ impl <'a> StrawberryLexer <'a> {
             }
         }
 
+        if operator == "*" {
+            let last_token = self.tokens.pop();
+            high_skip_whitespace!(self);
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Multiply(
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
+        }
+
+        if operator == "/" {
+            let last_token = self.tokens.pop();
+            high_skip_whitespace!(self);
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Divide(
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
+        }
+
+        let mut is_unary = true;
+
         if operator == "-" {
+            let last_token = self.tokens.pop();
+            high_skip_whitespace!(self);
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    is_unary = false;
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Subtract(
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
+        }
+
+        if operator == "-" && is_unary {
             let unary_number = self.next_token();
             treat_strawberry_error!(unary_number, syntax_error, "Could not use the unary operator.");
             let unary_number_binding = unary_number.unwrap();
