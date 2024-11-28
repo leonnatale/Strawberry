@@ -261,6 +261,7 @@ impl <'a> StrawberryLexer <'a> {
             if let Some(peeked) = peek {
                 if peeked == '(' {
                     let mut arguments = Vec::new();
+                    let mut index = 1usize;
                     self.next_character();
                     while let Some(current_character) = self.current_character {
                         if current_character == ')' {
@@ -275,7 +276,8 @@ impl <'a> StrawberryLexer <'a> {
                         let next_token = self.next_token();
 
                         if let Ok(next_token_binding) = next_token {
-                            arguments.push(next_token_binding);
+                            index += 1;
+                            self.tokens.push(next_token_binding);
                         } else {
                             break;
                         }
@@ -286,6 +288,15 @@ impl <'a> StrawberryLexer <'a> {
                     }
 
                     self.next_character();
+
+                    for _ in 1..index {
+                        let last_token = self.tokens.pop();
+                        if let Some(token) = last_token {
+                            arguments.push(token);
+                        }
+                    }
+
+                    arguments.reverse();
 
                     token_kind = TokenKind::Call(function_name, arguments);
                 }
@@ -328,7 +339,10 @@ impl <'a> StrawberryLexer <'a> {
 
         if operator == "+" {
             let last_token = self.tokens.pop();
-            high_skip_whitespace!(self);
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
             let next_token = self.next_token();
 
             if let Some(left_operand) = last_token {
@@ -344,7 +358,10 @@ impl <'a> StrawberryLexer <'a> {
 
         if operator == "*" {
             let last_token = self.tokens.pop();
-            high_skip_whitespace!(self);
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
             let next_token = self.next_token();
 
             if let Some(left_operand) = last_token {
@@ -360,7 +377,10 @@ impl <'a> StrawberryLexer <'a> {
 
         if operator == "/" {
             let last_token = self.tokens.pop();
-            high_skip_whitespace!(self);
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
             let next_token = self.next_token();
 
             if let Some(left_operand) = last_token {
@@ -378,29 +398,30 @@ impl <'a> StrawberryLexer <'a> {
 
         if operator == "-" {
             let last_token = self.tokens.pop();
-            high_skip_whitespace!(self);
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
             let next_token = self.next_token();
 
             if let Some(left_operand) = last_token {
-                if let Ok(right_operand) = next_token {
+                if let Ok(ref right_operand) = next_token {
                     is_unary = false;
                     start -= (left_operand.span.end - left_operand.span.start) + 1;
                     token_kind = TokenKind::Subtract(
                         Box::new(left_operand),
-                        Box::new(right_operand),
+                        Box::new(right_operand.clone()),
                     )
                 }
             }
-        }
 
-        if operator == "-" && is_unary {
-            let unary_number = self.next_token();
-            treat_strawberry_error!(unary_number, syntax_error, "Could not use the unary operator.");
-            let unary_number_binding = unary_number.unwrap();
-            if let TokenKind::Number(number) = unary_number_binding.kind {
-                token_kind = TokenKind::Number(number * -1.0);
-            } else {
-                return Err(StrawberryError::syntax_error("The unary operator can be used only with numbers"));
+            if is_unary {
+                let unary_number = next_token.unwrap();
+                if let TokenKind::Number(number) = unary_number.kind {
+                    token_kind = TokenKind::Number(number * -1.0);
+                } else {
+                    return Err(StrawberryError::syntax_error("The unary operator can be used only on numbers"));
+                }
             }
         }
 
