@@ -47,6 +47,7 @@ pub enum TokenKind {
     Number(f64),
     Attribution,
     Expression(ExpressionKind, Box<Token>, Box<Token>),
+    Function(String, Vec<String>, Box<Token>),
     Unknown
 }
 
@@ -169,6 +170,7 @@ impl <'a> StrawberryLexer <'a> {
     fn parse_bracket_scope(&mut self) -> Result<Token, StrawberryError> {
         let start = self.index as usize;
         let mut scope_tokens = Vec::new();
+        let mut index = 0usize;
         self.next_character();
 
         while let Some(current_character) = self.current_character {
@@ -177,16 +179,29 @@ impl <'a> StrawberryLexer <'a> {
             }
 
             skip_whitespace!(current_character, self);
-            let last_token = self.next_token()?;
-            scope_tokens.push(last_token);
+            let last_token = self.next_token();
+            if let Ok(next_token_binding) = last_token {
+                index += 1;
+                self.tokens.push(next_token_binding);
+            } else {
+                break;
+            }
         }
 
-        let message = "Scope was not closed";
         if !matches!(self.current_character, Some('}')) {
-            return Err(StrawberryError::syntax_error(&message));
+            return Err(StrawberryError::syntax_error("Scope was not closed"));
         }
 
         self.next_character();
+
+        for _ in 1..index {
+            let last_token = self.tokens.pop();
+            if let Some(token) = last_token {
+                scope_tokens.push(token);
+            }
+        }
+
+        scope_tokens.reverse();
 
         let end = self.index as usize;
 
@@ -261,6 +276,45 @@ impl <'a> StrawberryLexer <'a> {
             }
         }
 
+        if symbol_name == "function" {
+            high_skip_whitespace!(self);
+        
+            let function_name = self.next_token();
+            treat_strawberry_error!(
+                function_name,
+                syntax_error,
+                "Expected a function name after 'function'"
+            );
+
+            let function_binding = function_name.unwrap();
+            let function_data = if let TokenKind::Call(name, call_arguments) = function_binding.kind {
+                let arguments: Vec<String> = call_arguments.iter().map(|arg| {
+                    let argument_name = if let TokenKind::Identifier(arg_name) = arg.clone().kind {
+                        arg_name
+                    } else {
+                        String::new()
+                    };
+                    argument_name
+                }).collect();
+                (name, arguments)
+            } else {
+                return Err(StrawberryError::syntax_error(
+                    "Malformed function",
+                ));
+            };
+        
+            high_skip_whitespace!(self);
+            if self.current_character != Some('{') {
+                return Err(StrawberryError::syntax_error(
+                    "Expected '{' to start the function body.",
+                ));
+            }
+        
+            let function_body = self.parse_bracket_scope()?;
+        
+            token_kind = TokenKind::Function(function_data.0, function_data.1, Box::new(function_body));
+        }
+
         if let TokenKind::Identifier(function_name) = token_kind.clone() {
             let peek = self.peek_character();
             if let Some(peeked) = peek {
@@ -282,6 +336,12 @@ impl <'a> StrawberryLexer <'a> {
 
                         if let Ok(next_token_binding) = next_token {
                             index += 1;
+                            match &next_token_binding.kind {
+                                TokenKind::Expression(_, _, _) => {
+                                    index -= 1;
+                                },
+                                _ => ()
+                            };
                             self.tokens.push(next_token_binding);
                         } else {
                             break;

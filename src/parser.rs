@@ -2,10 +2,11 @@ use std::collections::HashMap;
 use crate::{error::StrawberryError, lexer::{ExpressionKind, Token, TokenKind}};
 
 #[derive(Debug, Clone)]
-enum StrawberryValue {
+pub enum StrawberryValue {
     String(String),
     Number(f64),
-    NativeFunction(fn(Vec<StrawberryValue>) -> Result<StrawberryValue, StrawberryError>),
+    NativeFunction(String, fn(Vec<StrawberryValue>) -> Result<StrawberryValue, StrawberryError>),
+    Function(String, Vec<String>, Vec<Box<Token>>),
     Empty,
 }
 
@@ -15,18 +16,31 @@ pub struct StrawberryParser {
 }
 
 impl StrawberryParser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>, variables: HashMap<String, StrawberryValue>) -> Self {
         let mut parser = Self {
             tokens,
-            variables: HashMap::new(),
+            variables
         };
 
         parser.variables.insert(
+            "fields_forever".into(),
+            StrawberryValue::String("Strawberry Fields Forever".into())
+        );
+
+        parser.variables.insert(
             "strawberry".into(),
-            StrawberryValue::NativeFunction(|args| {
+            StrawberryValue::NativeFunction("strawberry".into(), |args| {
+                let mut string_to_print = Vec::new();
                 for arg in args {
-                    println!("{:?}", arg);
+                    match arg {
+                        StrawberryValue::String(string) => string_to_print.push(string),
+                        StrawberryValue::Number(number) => string_to_print.push(number.to_string()),
+                        StrawberryValue::NativeFunction(name, _) => string_to_print.push(format!("(Native Function: {})", name)),
+                        StrawberryValue::Function(name, _,_) => string_to_print.push(format!("(Function: {})", name)),
+                        StrawberryValue::Empty => string_to_print.push("(Empty)".into())
+                    };
                 }
+                println!("{}", string_to_print.join(" "));
                 Ok(StrawberryValue::Empty)
             }),
         );
@@ -132,20 +146,39 @@ impl StrawberryParser {
 
     fn visit_call(&mut self, token: &Token) -> Result<StrawberryValue, StrawberryError> {
         if let TokenKind::Call(function_name, args) = &token.kind {
+            // Busca o valor da função pelo nome
             let function = self.visit_identifier(&Token {
                 kind: TokenKind::Identifier(function_name.clone()),
                 ..token.clone()
             })?;
-
-            let args_values: Result<Vec<_>, _> = args
-                .iter()
-                .map(|arg| self.parse_token(arg))
-                .collect();
-
+    
+            // Avalia os argumentos
+            let args_values: Result<Vec<_>, _> = args.iter().map(|arg| self.parse_token(arg)).collect();
             let args_values = args_values?;
-
+    
             match function {
-                StrawberryValue::NativeFunction(func) => func(args_values),
+                StrawberryValue::NativeFunction(_, func) => func(args_values),
+    
+                StrawberryValue::Function(_, params, body) => {
+                    if params.len() != args_values.len() {
+                        return Err(StrawberryError::semantic_error(&format!(
+                            "Function {} expected {} arguments, but got {}",
+                            function_name,
+                            params.len(),
+                            args_values.len()
+                        )));
+                    }
+    
+                    let mut scope = self.variables.clone();
+                    for (param, value) in params.iter().zip(args_values.into_iter()) {
+                        scope.insert(param.clone(), value);
+                    }
+    
+                    let mut result = StrawberryValue::Empty;
+                    result = StrawberryParser::new(body.iter().map(|t| *t.clone()).collect(), scope).run_token_stream()?;
+                    Ok(result)
+                }
+    
                 _ => Err(StrawberryError::semantic_error(&format!(
                     "{} is not callable",
                     function_name
@@ -155,6 +188,22 @@ impl StrawberryParser {
             Err(StrawberryError::semantic_error("Expected a Call token"))
         }
     }
+    
+
+    fn visit_function(&mut self, token: &Token) -> Result<StrawberryValue, StrawberryError> {
+        if let TokenKind::Function(name, arguments, scope) = &token.kind {
+            if let TokenKind::BracketScope(tokens) = &scope.kind {
+                self.variables.insert(
+                    name.clone(),
+                    StrawberryValue::Function(name.clone(), arguments.clone(), tokens.clone().iter().map(|t| Box::new(t.clone())).collect()),
+                );
+            }
+            Ok(StrawberryValue::Empty)
+        } else {
+            Err(StrawberryError::semantic_error("Expected a Function token"))
+        }
+    }
+    
 
     fn parse_token(&mut self, token: &Token) -> Result<StrawberryValue, StrawberryError> {
         match &token.kind {
@@ -163,14 +212,18 @@ impl StrawberryParser {
             }
             TokenKind::Let(_, _) => self.visit_let(token),
             TokenKind::Identifier(_) => self.visit_identifier(token),
+            TokenKind::Function(_, _, _) => self.visit_function(token),
             TokenKind::Call(_, _) => self.visit_call(token),
             _ => Err(StrawberryError::semantic_error("Unknown token type")),
         }
     }
 
-    pub fn run_token_stream(&mut self) {
+    pub fn run_token_stream(&mut self) -> Result<StrawberryValue, StrawberryError> {
+        let mut last_result = StrawberryValue::Empty;
         for token in self.tokens.clone() {
-            let _result = self.parse_token(&token).unwrap();
+            last_result = self.parse_token(&token)?;
         }
+
+        Ok(last_result)
     }
 }
