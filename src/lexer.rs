@@ -30,18 +30,23 @@ macro_rules! treat_strawberry_error {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum ExpressionKind {
+    Add,
+    Subtract,
+    Multiply,
+    Divide
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     LiteralString(String),
     BracketScope(Vec<Token>),
     Identifier(String),
-    Let(Box<Token>, Option<Box<Token>>),
+    Let(String, Option<Box<Token>>),
     Call(String, Vec<Token>),
     Number(f64),
     Attribution,
-    Subtract(Box<Token>, Box<Token>),
-    Sum(Box<Token>, Box<Token>),
-    Multiply(Box<Token>, Box<Token>),
-    Divide(Box<Token>, Box<Token>),
+    Expression(ExpressionKind, Box<Token>, Box<Token>),
     Unknown
 }
 
@@ -219,7 +224,7 @@ impl <'a> StrawberryLexer <'a> {
             let variable_name = self.next_token();
             treat_strawberry_error!(variable_name, syntax_error, "Set a variable name at the \"let\" statement");
             let variable_name_binding = variable_name.unwrap();
-            if let TokenKind::Identifier(_) = variable_name_binding.kind {
+            if let TokenKind::Identifier(variable_name) = variable_name_binding.kind {
                 high_skip_whitespace!(self);
                 let operator_token_binding = self.next_token();
     
@@ -248,7 +253,7 @@ impl <'a> StrawberryLexer <'a> {
                 }
     
                 token_kind = TokenKind::Let(
-                    Box::new(variable_name_binding),
+                    variable_name,
                     variable_value
                 );
             } else {
@@ -348,7 +353,8 @@ impl <'a> StrawberryLexer <'a> {
             if let Some(left_operand) = last_token {
                 if let Ok(right_operand) = next_token {
                     start -= (left_operand.span.end - left_operand.span.start) + 1;
-                    token_kind = TokenKind::Sum(
+                    token_kind = TokenKind::Expression(
+                        ExpressionKind::Add,
                         Box::new(left_operand),
                         Box::new(right_operand),
                     )
@@ -367,10 +373,11 @@ impl <'a> StrawberryLexer <'a> {
             if let Some(left_operand) = last_token {
                 if let Ok(right_operand) = next_token {
                     start -= (left_operand.span.end - left_operand.span.start) + 1;
-                    token_kind = TokenKind::Multiply(
+                    token_kind = TokenKind::Expression(
+                        ExpressionKind::Multiply,
                         Box::new(left_operand),
                         Box::new(right_operand),
-                    )
+                    );
                 }
             }
         }
@@ -386,10 +393,11 @@ impl <'a> StrawberryLexer <'a> {
             if let Some(left_operand) = last_token {
                 if let Ok(right_operand) = next_token {
                     start -= (left_operand.span.end - left_operand.span.start) + 1;
-                    token_kind = TokenKind::Divide(
+                    token_kind = TokenKind::Expression(
+                        ExpressionKind::Divide,
                         Box::new(left_operand),
                         Box::new(right_operand),
-                    )
+                    );
                 }
             }
         }
@@ -408,10 +416,11 @@ impl <'a> StrawberryLexer <'a> {
                 if let Ok(ref right_operand) = next_token {
                     is_unary = false;
                     start -= (left_operand.span.end - left_operand.span.start) + 1;
-                    token_kind = TokenKind::Subtract(
+                    token_kind = TokenKind::Expression(
+                        ExpressionKind::Subtract,
                         Box::new(left_operand),
                         Box::new(right_operand.clone()),
-                    )
+                    );
                 }
             }
 

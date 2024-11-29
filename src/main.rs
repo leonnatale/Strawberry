@@ -8,19 +8,9 @@ use parser::StrawberryParser;
 
 fn main() {
     let mut lex = StrawberryLexer::from_string(r#"
-    let m = 1 + 1;
-    let a = 1 - 1;
-    let t = 1 * 1;
-    let h = 1 / 1;
-    let e = 1.5 - -1;
-    let m = 1.6 + 1.57;
-    let a = 9.3 * -42.56;
-    let t = -923.123 / -90.31;
-    let i = 0 / 0;
-    let c = 0.5 + -0.5;
-    let s = 00 - 0000.56;
-
-    do_math(m, a, t, h, e, m, a, t, i, c, s)
+    let be = 10;
+    let be = 10 + be;
+    strawberry(be*be)
     "#);
     let result = lex.run_stream();
 
