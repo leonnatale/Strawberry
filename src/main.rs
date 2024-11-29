@@ -2,36 +2,52 @@ mod error;
 mod lexer;
 mod parser;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, env::current_dir, path::PathBuf};
 
-use error::StrawberryErrorKind;
+use error::{StrawberryError, StrawberryErrorKind};
 use lexer::StrawberryLexer;
-use parser::StrawberryParser;
+use parser::{StrawberryParser, StrawberryValue};
+
+fn load_file(file_name: &str) -> Result<StrawberryValue, StrawberryError> {
+    let mut file_path = PathBuf::new();
+    file_path.push(current_dir().unwrap_or_default());
+    file_path.push(file_name);
+
+    let file = std::fs::read_to_string(file_path);
+    match file {
+        Ok(source) => {
+            let mut lexer = StrawberryLexer::from_string(&source);
+            let token_stream = lexer.run_stream()?;
+            let mut parser = StrawberryParser::new(
+                token_stream,
+                HashMap::new()
+            );
+
+            Ok(parser.run_token_stream()?)
+        },
+        _ => {
+            println!("Could not open the file");
+            Ok(StrawberryValue::Empty)
+        }
+    }
+}
 
 fn main() {
-    let mut lex = StrawberryLexer::from_string(r#"
-    function do_math(n1, n2) {
-        strawberry('We do math!')
-        let be = n1 * 2 + n2 / 5.5 * 94.94 / 0.5;
-        strawberry('Returning:', be)
-        be
+    let mut arguments = std::env::args();
+    let file_name = arguments.nth(1).unwrap_or_default();
+
+    if file_name.is_empty() {
+        println!("Missing file name");
+        return;
     }
 
-    strawberry(do_math(5, 9))
-    strawberry(fields_forever + ', ' + fields_forever + '!')
-    "#);
-    let result = lex.run_stream();
-
-    match &result {
-        Ok(tokens) => {
-            let mut parser = StrawberryParser::new(tokens.to_owned(), HashMap::new());
-            let _result = parser.run_token_stream();
-        },
-        Err(err) => {
-            match &err.kind {
-                StrawberryErrorKind::SyntaxError(msg) => println!("Syntax error: {msg}"),
-                StrawberryErrorKind::SemanticError(msg) => println!("Semantic error: {msg}"),
+    match load_file(&file_name) {
+        Err(error) => {
+            match error.kind {
+                StrawberryErrorKind::SyntaxError(message) => println!("Syntax error: {message}"),
+                StrawberryErrorKind::SemanticError(message) => println!("Semantic error: {message}")
             }
-        }
+        },
+        _ => ()
     }
 }

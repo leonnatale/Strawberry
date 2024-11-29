@@ -146,13 +146,11 @@ impl StrawberryParser {
 
     fn visit_call(&mut self, token: &Token) -> Result<StrawberryValue, StrawberryError> {
         if let TokenKind::Call(function_name, args) = &token.kind {
-            // Busca o valor da função pelo nome
             let function = self.visit_identifier(&Token {
                 kind: TokenKind::Identifier(function_name.clone()),
                 ..token.clone()
             })?;
     
-            // Avalia os argumentos
             let args_values: Result<Vec<_>, _> = args.iter().map(|arg| self.parse_token(arg)).collect();
             let args_values = args_values?;
     

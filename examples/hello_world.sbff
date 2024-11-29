@@ -1,0 +1,5 @@
+function add(n1, n2) {
+    n1 + n2
+}
+
+strawberry(fields_forever, add(5.5, 7.7))
