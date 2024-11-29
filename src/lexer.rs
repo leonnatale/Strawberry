@@ -170,7 +170,7 @@ impl <'a> StrawberryLexer <'a> {
     fn parse_bracket_scope(&mut self) -> Result<Token, StrawberryError> {
         let start = self.index as usize;
         let mut scope_tokens = Vec::new();
-        let mut index = 0usize;
+        let mut index = 1usize;
         self.next_character();
 
         while let Some(current_character) = self.current_character {

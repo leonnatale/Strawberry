@@ -2,10 +2,13 @@ mod error;
 mod lexer;
 mod parser;
 
+mod libs;
+
 use std::{collections::HashMap, env::current_dir, path::PathBuf};
 
 use error::{StrawberryError, StrawberryErrorKind};
 use lexer::StrawberryLexer;
+use libs::load_standard;
 use parser::{StrawberryParser, StrawberryValue};
 
 fn load_file(file_name: &str) -> Result<StrawberryValue, StrawberryError> {
@@ -22,6 +25,8 @@ fn load_file(file_name: &str) -> Result<StrawberryValue, StrawberryError> {
                 token_stream,
                 HashMap::new()
             );
+
+            load_standard(&mut parser);
 
             Ok(parser.run_token_stream()?)
         },

@@ -1,0 +1,5 @@
+function hello(entity) {
+    'Hello, ' + entity + '!'
+}
+
+strawberry(hello(beatle))

@@ -12,40 +12,15 @@ pub enum StrawberryValue {
 
 pub struct StrawberryParser {
     tokens: Vec<Token>,
-    variables: HashMap<String, StrawberryValue>,
+    pub variables: HashMap<String, StrawberryValue>,
 }
 
 impl StrawberryParser {
     pub fn new(tokens: Vec<Token>, variables: HashMap<String, StrawberryValue>) -> Self {
-        let mut parser = Self {
+        Self {
             tokens,
             variables
-        };
-
-        parser.variables.insert(
-            "fields_forever".into(),
-            StrawberryValue::String("Strawberry Fields Forever".into())
-        );
-
-        parser.variables.insert(
-            "strawberry".into(),
-            StrawberryValue::NativeFunction("strawberry".into(), |args| {
-                let mut string_to_print = Vec::new();
-                for arg in args {
-                    match arg {
-                        StrawberryValue::String(string) => string_to_print.push(string),
-                        StrawberryValue::Number(number) => string_to_print.push(number.to_string()),
-                        StrawberryValue::NativeFunction(name, _) => string_to_print.push(format!("(Native Function: {})", name)),
-                        StrawberryValue::Function(name, _,_) => string_to_print.push(format!("(Function: {})", name)),
-                        StrawberryValue::Empty => string_to_print.push("(Empty)".into())
-                    };
-                }
-                println!("{}", string_to_print.join(" "));
-                Ok(StrawberryValue::Empty)
-            }),
-        );
-
-        parser
+        }
     }
 
     fn visit_expression(&mut self, token: &Token) -> Result<StrawberryValue, StrawberryError> {
