@@ -1,4 +1,4 @@
-if(beatle == 'Paul McCartney' {
+if(beatle == 'Ringo Starr' {
     strawberry(beatle, 'is the best!')
 }, {
     strawberry(beatle, 'is cool!')
