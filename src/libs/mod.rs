@@ -15,7 +15,7 @@ pub fn load_standard(parser: &mut StrawberryParser) {
         "beatle".into(),
         StrawberryValue::String(standard::beatle()),
     );
-    parser.variables.insert(
+    parser.variables.insert( // :P
         "if".into(),
         StrawberryValue::NativeFunction("IfStatement".into(), standard::if_comparison),
     );

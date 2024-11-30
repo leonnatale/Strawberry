@@ -57,29 +57,23 @@ pub fn execute_code_block(args: Vec<StrawberryValue>, context: &mut StrawberryPa
 }
 
 pub fn if_comparison(mut args: Vec<StrawberryValue>, context: &mut StrawberryParser) -> Result<StrawberryValue, StrawberryError> {
-    // Remove o primeiro argumento, que deve ser a condição
     let condition = args.remove(0);
 
-    // Verifica se a condição é um booleano
     if let StrawberryValue::Boolean(boolean) = condition {
         if boolean {
-            // Executa o bloco "if" (primeiro bloco no restante dos argumentos)
             if let Some(if_block) = args.get(0) {
                 return execute_code_block(vec![if_block.clone()], context);
             }
         } else {
-            // Executa o bloco "else" (segundo bloco no restante dos argumentos, se existir)
             if let Some(else_block) = args.get(1) {
                 return execute_code_block(vec![else_block.clone()], context);
             }
         }
     } else {
-        // Retorna erro se o primeiro argumento não for um booleano
         return Err(StrawberryError::semantic_error(
             "First argument of 'if' must be a boolean",
         ));
     }
 
-    // Retorna vazio se nenhum bloco foi executado
     Ok(StrawberryValue::Empty)
 }
