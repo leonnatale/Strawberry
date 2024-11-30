@@ -37,6 +37,17 @@ pub enum ExpressionKind {
     Divide
 }
 
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ComparisonKind {
+    Equal,
+    NotEqual,
+    GreaterThan,
+    LessThan,
+    GreaterEqual,
+    LessEqual
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     LiteralString(String),
@@ -45,6 +56,8 @@ pub enum TokenKind {
     Let(String, Option<Box<Token>>),
     Call(String, Vec<Token>),
     Number(f64),
+    Boolean(bool),
+    Comparison(ComparisonKind,Box<Token>, Box<Token>),
     Attribution,
     Expression(ExpressionKind, Box<Token>, Box<Token>),
     Function(String, Vec<String>, Box<Token>),
@@ -82,7 +95,7 @@ impl <'a> StrawberryLexer <'a> {
             character_stream: source.chars(),
             current_character: Some(char::default()),
             index: -1,
-            operators: &[ '=', '+', '-', '*', '/' ]
+            operators: &[ '=', '!', '<', '>', '+', '-', '*', '/' ]
         }
     }
 
@@ -315,6 +328,10 @@ impl <'a> StrawberryLexer <'a> {
             token_kind = TokenKind::Function(function_data.0, function_data.1, Box::new(function_body));
         }
 
+        if [ "true", "false" ].contains(&symbol_name.as_str()) {
+            token_kind = TokenKind::Boolean(symbol_name == "true")
+        }
+
         if let TokenKind::Identifier(function_name) = token_kind.clone() {
             let peek = self.peek_character();
             if let Some(peeked) = peek {
@@ -490,6 +507,126 @@ impl <'a> StrawberryLexer <'a> {
                     token_kind = TokenKind::Number(number * -1.0);
                 } else {
                     return Err(StrawberryError::syntax_error("The unary operator can be used only on numbers"));
+                }
+            }
+        }
+
+        if operator == "==" {
+            let last_token = self.tokens.pop();
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Comparison(
+                        ComparisonKind::Equal,
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
+        }
+
+        if operator == "!=" {
+            let last_token = self.tokens.pop();
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Comparison(
+                        ComparisonKind::NotEqual,
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
+        }
+
+        if operator == ">=" {
+            let last_token = self.tokens.pop();
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Comparison(
+                        ComparisonKind::GreaterEqual,
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
+        }
+
+        if operator == "<=" {
+            let last_token = self.tokens.pop();
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Comparison(
+                        ComparisonKind::LessEqual,
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
+        }
+
+        if operator == ">" {
+            let last_token = self.tokens.pop();
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Comparison(
+                        ComparisonKind::GreaterThan,
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
+                }
+            }
+        }
+
+        if operator == "<" {
+            let last_token = self.tokens.pop();
+            while let Some(current_character) = self.current_character {
+                skip_whitespace!(current_character, self);
+                break;
+            }
+            let next_token = self.next_token();
+
+            if let Some(left_operand) = last_token {
+                if let Ok(right_operand) = next_token {
+                    start -= (left_operand.span.end - left_operand.span.start) + 1;
+                    token_kind = TokenKind::Comparison(
+                        ComparisonKind::LessThan,
+                        Box::new(left_operand),
+                        Box::new(right_operand),
+                    )
                 }
             }
         }

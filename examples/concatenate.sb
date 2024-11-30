@@ -1,0 +1,3 @@
+let quote = beatle + ' says: "' + fields_forever + '"';
+
+strawberry(quote)

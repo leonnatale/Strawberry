@@ -16,6 +16,16 @@ fn load_file(file_name: &str) -> Result<StrawberryValue, StrawberryError> {
     file_path.push(current_dir().unwrap_or_default());
     file_path.push(file_name);
 
+    if let Some(extesion) = file_path.extension() {
+        if !extesion.eq("sb") {
+            println!("{extesion:?} is not a valid Strawberry extension");
+            return Ok(StrawberryValue::Empty);
+        }
+    } else {
+        println!("Missing file extension");
+        return Ok(StrawberryValue::Empty);
+    }
+
     let file = std::fs::read_to_string(file_path);
     match file {
         Ok(source) => {

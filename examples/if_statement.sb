@@ -1,0 +1,5 @@
+if(beatle == 'Paul McCartney' {
+    strawberry(beatle, 'is the best!')
+}, {
+    strawberry(beatle, 'is cool!')
+})

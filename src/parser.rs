@@ -1,12 +1,14 @@
 use std::collections::HashMap;
-use crate::{error::StrawberryError, lexer::{ExpressionKind, Token, TokenKind}};
+use crate::{error::StrawberryError, lexer::{ComparisonKind, ExpressionKind, Token, TokenKind}};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum StrawberryValue {
     String(String),
     Number(f64),
-    NativeFunction(String, fn(Vec<StrawberryValue>) -> Result<StrawberryValue, StrawberryError>),
+    Boolean(bool),
+    NativeFunction(String, fn(Vec<StrawberryValue>, &mut StrawberryParser) -> Result<StrawberryValue, StrawberryError>),
     Function(String, Vec<String>, Vec<Box<Token>>),
+    Block(Vec<Box<Token>>),
     Empty,
 }
 
@@ -130,7 +132,7 @@ impl StrawberryParser {
             let args_values = args_values?;
     
             match function {
-                StrawberryValue::NativeFunction(_, func) => func(args_values),
+                StrawberryValue::NativeFunction(_, func) => func(args_values, self),
     
                 StrawberryValue::Function(_, params, body) => {
                     if params.len() != args_values.len() {
@@ -176,17 +178,73 @@ impl StrawberryParser {
             Err(StrawberryError::semantic_error("Expected a Function token"))
         }
     }
-    
+
+    fn evaluate_comparison(
+        &self,
+        operator: ComparisonKind,
+        left: StrawberryValue,
+        right: StrawberryValue,
+    ) -> Result<StrawberryValue, StrawberryError> {
+        match (operator, left, right) {
+            (ComparisonKind::Equal, StrawberryValue::Number(lhs), StrawberryValue::Number(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs == rhs))
+            }
+            (ComparisonKind::NotEqual, StrawberryValue::Number(lhs), StrawberryValue::Number(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs != rhs))
+            }
+            (ComparisonKind::GreaterThan, StrawberryValue::Number(lhs), StrawberryValue::Number(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs > rhs))
+            }
+            (ComparisonKind::LessThan, StrawberryValue::Number(lhs), StrawberryValue::Number(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs < rhs))
+            }
+            (ComparisonKind::GreaterEqual, StrawberryValue::Number(lhs), StrawberryValue::Number(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs >= rhs))
+            }
+            (ComparisonKind::LessEqual, StrawberryValue::Number(lhs), StrawberryValue::Number(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs <= rhs))
+            }
+            (ComparisonKind::Equal, StrawberryValue::String(lhs), StrawberryValue::String(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs == rhs))
+            }
+            (ComparisonKind::NotEqual, StrawberryValue::String(lhs), StrawberryValue::String(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs != rhs))
+            }
+            (ComparisonKind::Equal, StrawberryValue::Boolean(lhs), StrawberryValue::Boolean(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs == rhs))
+            }
+            (ComparisonKind::NotEqual, StrawberryValue::Boolean(lhs), StrawberryValue::Boolean(rhs)) => {
+                Ok(StrawberryValue::Boolean(lhs != rhs))
+            }
+            _ => Err(StrawberryError::semantic_error(
+                "Invalid comparison or unsupported types",
+            )),
+        }
+    }
 
     fn parse_token(&mut self, token: &Token) -> Result<StrawberryValue, StrawberryError> {
         match &token.kind {
-            TokenKind::LiteralString(_) | TokenKind::Number(_) | TokenKind::Expression(_, _, _) => {
-                self.visit_expression(token)
-            }
+            TokenKind::Boolean(value) => Ok(StrawberryValue::Boolean(*value)),
+            TokenKind::BracketScope(value) => Ok(StrawberryValue::Block(value.iter().map(|t| Box::new(t.clone())).collect())),
+            TokenKind::LiteralString(_) 
+            | TokenKind::Number(_) 
+            | TokenKind::Expression(_, _, _) => self.visit_expression(token),
+    
             TokenKind::Let(_, _) => self.visit_let(token),
+    
             TokenKind::Identifier(_) => self.visit_identifier(token),
+    
             TokenKind::Function(_, _, _) => self.visit_function(token),
+    
             TokenKind::Call(_, _) => self.visit_call(token),
+    
+            TokenKind::Comparison(operator, left, right) => {
+                let left_value = self.parse_token(left)?;
+                let right_value = self.parse_token(right)?;
+    
+                self.evaluate_comparison(operator.clone(), left_value, right_value)
+            }
+    
             _ => Err(StrawberryError::semantic_error("Unknown token type")),
         }
     }
